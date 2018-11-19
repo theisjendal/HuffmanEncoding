@@ -1,11 +1,26 @@
 import Data.List
 
 ---------------------------------------
--- Types
+-- Types and instances
 ---------------------------------------
 
 data Bit = Zero | One deriving Show
-data BTree = Leaf Char Int | Branch BTree BTree Int deriving (Show, Eq, Ord)
+data BTree = Leaf Char Int | Branch BTree BTree Int deriving (Show)
+
+-- Must be exhaustive to insure no exceptions. Meaning all combinations of BTree. 
+instance Eq BTree where
+    (Leaf _ a) == (Leaf _ b) = a == b
+    (Branch _ _ a) == (Branch _ _ b) = a == b
+    (Leaf _ a) == (Branch _ _ b) = a == b
+    (Branch _ _ a) == (Leaf _ b) = a == b
+
+instance Ord BTree where
+    (Leaf _ a) `compare` (Leaf _ b) = a `compare` b
+    (Branch _ _ a) `compare` (Branch _ _ b) = a `compare` b
+    (Leaf _ a) `compare` (Branch _ _ b) = a `compare` b
+    (Branch _ _ a) `compare` (Leaf _ b) = a `compare` b
+
+
 
 type Frequency = (Char, Int)
 type Encoding = (Char, [Bit])
@@ -21,20 +36,22 @@ main = do
     -- Set to a tuple of bits and huffman tree.
     let encoded = encode string 
 
-    print (fst encoded) -- Is able to print any type deriving from Show.
+    print (fst encoded) -- Is able to print any type deriving from Show. Just putStrLn with show function. 
 
     putStrLn "\nPress 1 to decode previous message or anything else to exit"
     choice <- getLine
 
     if choice == "1" 
-    then do 
-        -- Decoded previous encoded message. 
-        let decoded = uncurry decode encoded
-        putStrLn ("\n" ++ decoded)
-    else putStrLn "Exiting"
+        then do 
+            -- Decoded previous encoded message. 
+            let decoded = uncurry decode encoded
+            putStrLn ("\n" ++ decoded)
+        else return ()
+    
+    putStrLn "\nThe program is now done. Exiting.."
 
 ---------------------------------------
--- Auxillary funcions
+-- Auxillary functions
 ---------------------------------------
 
 -- Adds values of a pair and returns the key of the first and their combined value.
@@ -55,7 +72,9 @@ ordering :: BTree -> BTree -> Ordering
 ordering t1 t2 = compare (freq t1) (freq t2)
 
 -- My own lookup as every letter in the string is present in the table and Maybe is therefore not necessary. 
+-- If a character for some reason is not present, in encoding then it is ignored.
 lookup' :: Char -> [Encoding] -> [Bit]
+lookup' _ [] = []
 lookup' c (e:es)  = if c == fst e then snd e else lookup' c es
 
 ---------------------------------------
@@ -74,24 +93,25 @@ charFrequency xs =
         leaf : charFrequency different
 
 -- Given a list of BTrees (probably Leafs) merges two trees with lowest frequency until a single tree exist. 
-construct :: [BTree] -> BTree
-construct ts = construct' (sortBy ordering ts) -- Sorts to ensure ordering.
+construct :: [BTree] -> Maybe BTree
+construct ts = construct' (sort ts) -- Sorts to ensure ordering.
     where
         -- Actually constructs the BTree.
-        construct' :: [BTree] -> BTree
-        construct' [tree] = tree
-        construct' trees = 
+        construct' :: [BTree] -> Maybe BTree
+        construct' [] = Nothing
+        construct' [tree] = Just tree
+        construct' (left:right:trees) = 
             let
-                left = head trees
-                right = trees !! 1              -- Takes the second element of trees.
                 merged = treemerge left right 
-                rest = drop 2 trees             -- Removes two first elements of tree.
             in
-                construct' (insertBy ordering merged rest) -- Inserts merged and calls again.
+                construct' (insert merged trees) -- Inserts merged and calls again.
 
 -- Make generate encodings from a BTree.
-encodings :: BTree -> [Encoding]
-encodings = encodings' []
+encodings :: Maybe BTree -> [Encoding]
+encodings tree =
+    case tree of 
+        Just t -> encodings' [] t
+        Nothing -> []
     where 
         -- Goes through the tree and saves a bit value dependend on left or right branch. If a leaf save the character and bit sequence.  
         encodings' :: [Bit] -> BTree -> [Encoding]
@@ -99,7 +119,7 @@ encodings = encodings' []
         encodings' bs (Branch left right _) = encodings' (bs ++ [Zero]) left ++ encodings' (bs ++ [One]) right
 
 -- Encodes a string and return the bits and the huffman tree. 
-encode :: String -> ([Bit], BTree)
+encode :: String -> ([Bit], Maybe BTree)
 encode string = 
     let
         frequencies = charFrequency string      -- Gets the frequencies of a the characters.
@@ -107,19 +127,21 @@ encode string =
         ecs = encodings huffmanTree             -- Make encodings from huffman tree.
         bitrepresentation = foldr (\c -> (++) (lookup' c ecs)) [] string -- Appends bit representation for each char in string.
     in
-        (bitrepresentation, huffmanTree) -- Note huffmanTree might be an exception, but wont interfere with the main program. 
+        (bitrepresentation, huffmanTree)
 
 -- Decodes a bit sequence given a BTree.
-decode :: [Bit] -> BTree -> String
-decode [] _ = [] -- Return nothing if empty as no BTree will exist. 
-decode bits root = decode' bits root
-    where
-        -- Takes a bit from the list and either take the left or right branch until a leaf appears. 
-        -- Then adds the character of the leaf and either decodes the rest of the bit sequence or stops no more bits.
-        decode' :: [Bit] -> BTree -> String
-        decode' [] (Leaf a _) = [a]
-        decode' bits (Leaf a _) = a : decode' bits root
-        decode' (bit:bits) (Branch left right _) =
-            case bit of
-                Zero -> decode' bits left
-                One -> decode' bits right
+decode :: [Bit] -> Maybe BTree -> String 
+decode bits root = 
+    case root of 
+        Nothing -> "" -- Returns the empty string
+        Just r -> decode' bits r
+            where
+                -- Takes a bit from the list and either take the left or right branch until a leaf appears. 
+                -- Then adds the character of the leaf and either decodes the rest of the bit sequence or stops no more bits.
+                decode' :: [Bit] -> BTree -> String
+                decode' [] (Leaf a _) = [a]
+                decode' bits (Leaf a _) = a : decode' bits r
+                decode' (bit:bits) (Branch left right _) =
+                    case bit of
+                        Zero -> decode' bits left
+                        One -> decode' bits right
