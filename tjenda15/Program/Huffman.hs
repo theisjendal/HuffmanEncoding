@@ -22,7 +22,6 @@ instance Ord BTree where
     (Leaf _ a) `compare` (Branch _ _ b) = a `compare` b
     (Branch _ _ a) `compare` (Leaf _ b) = a `compare` b
 
-type Frequency = (Char, Int)
 type Encoding = (Char, [Bit])
 
 ---------------------------------------
@@ -36,7 +35,7 @@ main = do
     -- Set to a tuple of bits and huffman tree.
     let encoded = encode string 
 
-    print (fst encoded) -- Is able to print any type deriving from Show. Just putStrLn with show function. 
+    print encoded -- Is able to print any type deriving from Show. Just putStrLn with show function. 
 
     putStrLn "\nPress 1 to decode previous message or anything else to exit"
     choice <- getLine
@@ -53,10 +52,6 @@ main = do
 ---------------------------------------
 -- Auxillary functions
 ---------------------------------------
-
--- Adds values of a pair and returns the key of the first and their combined value.
-addvalue :: Frequency -> Frequency -> Frequency
-addvalue (a,b) (_,c) =  (a, b + c)
 
 -- Gets the frequency of a node in a BTree.
 freq :: BTree -> Int                            
@@ -78,15 +73,15 @@ lookup' c (e:es)  = if c == fst e then snd e else lookup' c es
 ---------------------------------------
 
 -- Returns a list of leaves.
-charFrequency :: String -> [BTree]
-charFrequency [] = []
-charFrequency xs =
+makeleafs :: String -> [BTree]
+makeleafs [] = []
+makeleafs xs =
     let
         h = head xs
         different = [x | x <- xs, x /=  h]              -- Finds all characters that are not equal.
         leaf = Leaf h (length xs - length different)    -- The difference total length and length in different is the frequency.
     in
-        leaf : charFrequency different
+        leaf : makeleafs different
 
 -- Given a list of BTrees (probably Leafs) merges two trees with lowest frequency until a single tree exist. 
 construct :: [BTree] -> Maybe BTree
@@ -118,7 +113,7 @@ encodings tree =
 encode :: String -> ([Bit], Maybe BTree)
 encode string = 
     let
-        frequencies = charFrequency string      -- Gets the frequencies of a the characters.
+        frequencies = makeleafs string      -- Gets the frequencies of a the characters.
         huffmanTree = construct frequencies     -- Construct a huffman tree given the frequencies.
         ecs = encodings huffmanTree             -- Make encodings from huffman tree.
         bitrepresentation = foldr (\c -> (++) (lookup' c ecs)) [] string -- Appends bit representation for each char in string.
